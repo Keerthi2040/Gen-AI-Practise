@@ -57,9 +57,7 @@ To address this, we use a concept called Mini RAG. Let us assume the input is ne
 For this, we need two things: the Query and the Input, which are passed to FAISS. FAISS will then provide a set of results, which are text (a minified response). 
 This minified response is then passed to a Filter (Augmentation), which may or may not be an LLM. The augmented data is sent to the LLM along with the query, and the response is sent back to the user.
 
-Lang_chain=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
 
-Groq= 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
 
 
 import gradio as gr
