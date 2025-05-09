@@ -1,0 +1,281 @@
+https://github.com/open-webui/open-webui
+
+Model solves the mathematical equation to give the output. Inputs multiplied with weight and added with bias gives the output. This output is compared with desired output and weights 
+are modified till we get desired output.
+
+model is created depending on the basis of the problem such as # of inputs and what is the desired output and its type.
+training process starts with the model talking in the input with some initial assigned bias and weights and after processing and getting the output the weights and bias changes depending on the real output and the predicted one to achieve better accuracy
+krishnasrinivas chilkamarri
+1:45 PM
+Training is the process where we provide input parameter to a mathematical function to achieve certain goal.
+In the process, a model is built around the mathematical function that consumes input parameters, bias, weight of each input parameter and applies relevant activation function that would process this calculation and provide an output, this process of calculating parameters occur at every neuron at every level in the model.
+krishnasrinivas chilkamarri
+1:46 PM
+if the calculated output varies from the expected value then the weights at each neuron are adjusted in such a way that model could produce accurate and expected result.
+
+Drawbacks with the previous architecture is limit on data if we impose lot of questions and memory corruption or memory leakage.
+to overcome this we can use a selective forwarding algorithm where we we choose what to pass to LLM.When large data is passed through an LLM we apply a selective forwarding filter where it selects the essentials either through LLM or Human or normal filter and then pass it to LLM to get the response.
+How LLm works 
+For any LLM model it is associated with model weights where weights are defined and model which is the formula of the model and Executable where we execute the formula by taking weights and realtion to pass it to function ..We need these three layers to run for any model .
+we take the executable import a function and callable(X) where ollama creates a api layer on X 
+
+Drawbacks of the Previous Architecture:
+The previous architecture has limitations on data handling when a large number of questions are imposed, as well as issues like memory corruption or memory leakage.
+
+Solution: Selective Forwarding Algorithm
+To overcome these challenges, we can implement a selective forwarding algorithm. This approach involves selectively choosing what data to pass to the Large Language Model (LLM).
+
+How It Works:
+When large datasets are processed by an LLM, a selective forwarding filter is applied. This filter identifies and extracts only the essential information, either through:
+
+The LLM itself,
+
+Human intervention, or
+
+A standard filtering mechanism.
+
+Once the essential data is selected, it is passed to the LLM to generate an appropriate response.
+
+How LLM works:
+For any Large Language Model (LLM), three key layers are required:
+
+Model Weight:Which defines the weights associated with the perceptrons
+Model File :The Activation function of the model
+Executable Layer:the python code
+
+Implementation Example:
+To run the model, we take the executable layer, import a function, and use a callable (X). In this case, Ollama creates an API layer on top of X,and enables model execution.
+
+RAG Implementation: Let us assume we have multiple PDF files with different sizes of memory. So, we cannot send all these files directly to the LLM. 
+Therefore, we apply a process of vectorization and embedding where we convert the data into tokens and then into vectors, create relationships between them, and map them into a graph or vector database. 
+All these will be sent to the knowledge base. 
+When the user sends a request to the LLM, the LLM will search for the related terms in the knowledge base, which is called retrieval, and sends the response back to the API. 
+The LLM then takes the user's prompt and augmented data, which is formatted data that is related to the context. This process is called augmentation, like structuring the data properly by adding more data or formatting. 
+The LLM will generate back the response to the user, which is called generation.
+Problem with RAG is that if my LLM supports 500 words but the context has 1000 words, in such a case, it will be difficult to process. 
+To address this, we use a concept called Mini RAG. Let us assume the input is neither too small nor too big, so we pass it to FAISS (Facebook AI Similarity Search). 
+For this, we need two things: the Query and the Input, which are passed to FAISS. FAISS will then provide a set of results, which are text (a minified response). 
+This minified response is then passed to a Filter (Augmentation), which may or may not be an LLM. The augmented data is sent to the LLM along with the query, and the response is sent back to the user.
+
+Lang_chain=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
+
+Groq= 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
+
+
+import gradio as gr
+import os
+api_token = os.getenv("HF_TOKEN")
+
+
+from langchain_community.vectorstores import FAISS
+from langchain_community.document_loaders import PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.vectorstores import Chroma
+from langchain.chains import ConversationalRetrievalChain
+from langchain_community.embeddings import HuggingFaceEmbeddings 
+from langchain_community.llms import HuggingFacePipeline
+from langchain.chains import ConversationChain
+from langchain.memory import ConversationBufferMemory
+from langchain_community.llms import HuggingFaceEndpoint
+import torch
+
+list_llm = ["meta-llama/Meta-Llama-3-8B-Instruct", "mistralai/Mistral-7B-Instruct-v0.2"]  
+list_llm_simple = [os.path.basename(llm) for llm in list_llm]
+
+# Load and split PDF document
+def load_doc(list_file_path):
+    # Processing for one document only
+    # loader = PyPDFLoader(file_path)
+    # pages = loader.load()
+    loaders = [PyPDFLoader(x) for x in list_file_path]
+    pages = []
+    for loader in loaders:
+        pages.extend(loader.load())
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size = 1024, 
+        chunk_overlap = 64 
+    )  
+    doc_splits = text_splitter.split_documents(pages)
+    return doc_splits
+
+# Create vector database
+def create_db(splits):
+    embeddings = HuggingFaceEmbeddings()
+    vectordb = FAISS.from_documents(splits, embeddings)
+    return vectordb
+
+
+# Initialize langchain LLM chain
+def initialize_llmchain(llm_model, temperature, max_tokens, top_k, vector_db, progress=gr.Progress()):
+    if llm_model == "meta-llama/Meta-Llama-3-8B-Instruct":
+        llm = HuggingFaceEndpoint(
+            repo_id=llm_model,
+            huggingfacehub_api_token = api_token,
+            temperature = temperature,
+            max_new_tokens = max_tokens,
+            top_k = top_k,
+        )
+    else:
+        llm = HuggingFaceEndpoint(
+            huggingfacehub_api_token = api_token,
+            repo_id=llm_model, 
+            temperature = temperature,
+            max_new_tokens = max_tokens,
+            top_k = top_k,
+        )
+    
+    memory = ConversationBufferMemory(
+        memory_key="chat_history",
+        output_key='answer',
+        return_messages=True
+    )
+
+    retriever=vector_db.as_retriever()
+    qa_chain = ConversationalRetrievalChain.from_llm(
+        llm,
+        retriever=retriever,
+        chain_type="stuff", 
+        memory=memory,
+        return_source_documents=True,
+        verbose=False,
+    )
+    return qa_chain
+
+# Initialize database
+def initialize_database(list_file_obj, progress=gr.Progress()):
+    # Create a list of documents (when valid)
+    list_file_path = [x.name for x in list_file_obj if x is not None]
+    # Load document and create splits
+    doc_splits = load_doc(list_file_path)
+    # Create or load vector database
+    vector_db = create_db(doc_splits)
+    return vector_db, "Database created!"
+
+# Initialize LLM
+def initialize_LLM(llm_option, llm_temperature, max_tokens, top_k, vector_db, progress=gr.Progress()):
+    # print("llm_option",llm_option)
+    llm_name = list_llm[llm_option]
+    print("llm_name: ",llm_name)
+    qa_chain = initialize_llmchain(llm_name, llm_temperature, max_tokens, top_k, vector_db, progress)
+    return qa_chain, "QA chain initialized. Chatbot is ready!"
+
+
+def format_chat_history(message, chat_history):
+    formatted_chat_history = []
+    for user_message, bot_message in chat_history:
+        formatted_chat_history.append(f"User: {user_message}")
+        formatted_chat_history.append(f"Assistant: {bot_message}")
+    return formatted_chat_history
+    
+
+def conversation(qa_chain, message, history):
+    formatted_chat_history = format_chat_history(message, history)
+    # Generate response using QA chain
+    response = qa_chain.invoke({"question": message, "chat_history": formatted_chat_history})
+    response_answer = response["answer"]
+    if response_answer.find("Helpful Answer:") != -1:
+        response_answer = response_answer.split("Helpful Answer:")[-1]
+    response_sources = response["source_documents"]
+    response_source1 = response_sources[0].page_content.strip()
+    response_source2 = response_sources[1].page_content.strip()
+    response_source3 = response_sources[2].page_content.strip()
+    # Langchain sources are zero-based
+    response_source1_page = response_sources[0].metadata["page"] + 1
+    response_source2_page = response_sources[1].metadata["page"] + 1
+    response_source3_page = response_sources[2].metadata["page"] + 1
+    # Append user message and response to chat history
+    new_history = history + [(message, response_answer)]
+    return qa_chain, gr.update(value=""), new_history, response_source1, response_source1_page, response_source2, response_source2_page, response_source3, response_source3_page
+    
+
+def upload_file(file_obj):
+    list_file_path = []
+    for idx, file in enumerate(file_obj):
+        file_path = file_obj.name
+        list_file_path.append(file_path)
+    return list_file_path
+
+
+def demo():
+    # with gr.Blocks(theme=gr.themes.Default(primary_hue="sky")) as demo:
+    with gr.Blocks(theme=gr.themes.Default(primary_hue="red", secondary_hue="pink", neutral_hue = "sky")) as demo:
+        vector_db = gr.State()
+        qa_chain = gr.State()
+        gr.HTML("<center><h1>RAG PDF chatbot</h1><center>")
+        gr.Markdown("""<b>Query your PDF documents!</b> This AI agent is designed to perform retrieval augmented generation (RAG) on PDF documents. The app is hosted on Hugging Face Hub for the sole purpose of demonstration. \
+        <b>Please do not upload confidential documents.</b>
+        """)
+        with gr.Row():
+            with gr.Column(scale = 86):
+                gr.Markdown("<b>Step 1 - Upload PDF documents and Initialize RAG pipeline</b>")
+                with gr.Row():
+                    document = gr.Files(height=300, file_count="multiple", file_types=["pdf"], interactive=True, label="Upload PDF documents")
+                with gr.Row():
+                    db_btn = gr.Button("Create vector database")
+                with gr.Row():
+                        db_progress = gr.Textbox(value="Not initialized", show_label=False) # label="Vector database status", 
+                gr.Markdown("<style>body { font-size: 16px; }</style><b>Select Large Language Model (LLM) and input parameters</b>")
+                with gr.Row():
+                    llm_btn = gr.Radio(list_llm_simple, label="Available LLMs", value = list_llm_simple[0], type="index") # info="Select LLM", show_label=False
+                with gr.Row():
+                    with gr.Accordion("LLM input parameters", open=False):
+                        with gr.Row():
+                            slider_temperature = gr.Slider(minimum = 0.01, maximum = 1.0, value=0.5, step=0.1, label="Temperature", info="Controls randomness in token generation", interactive=True)
+                        with gr.Row():
+                            slider_maxtokens = gr.Slider(minimum = 128, maximum = 9192, value=4096, step=128, label="Max New Tokens", info="Maximum number of tokens to be generated",interactive=True)
+                        with gr.Row():
+                                slider_topk = gr.Slider(minimum = 1, maximum = 10, value=3, step=1, label="top-k", info="Number of tokens to select the next token from", interactive=True)
+                with gr.Row():
+                    qachain_btn = gr.Button("Initialize Question Answering Chatbot")
+                with gr.Row():
+                        llm_progress = gr.Textbox(value="Not initialized", show_label=False) # label="Chatbot status", 
+
+            with gr.Column(scale = 200):
+                gr.Markdown("<b>Step 2 - Chat with your Document</b>")
+                chatbot = gr.Chatbot(height=505)
+                with gr.Accordion("Relevent context from the source document", open=False):
+                    with gr.Row():
+                        doc_source1 = gr.Textbox(label="Reference 1", lines=2, container=True, scale=20)
+                        source1_page = gr.Number(label="Page", scale=1)
+                    with gr.Row():
+                        doc_source2 = gr.Textbox(label="Reference 2", lines=2, container=True, scale=20)
+                        source2_page = gr.Number(label="Page", scale=1)
+                    with gr.Row():
+                        doc_source3 = gr.Textbox(label="Reference 3", lines=2, container=True, scale=20)
+                        source3_page = gr.Number(label="Page", scale=1)
+                with gr.Row():
+                    msg = gr.Textbox(placeholder="Ask a question", container=True)
+                with gr.Row():
+                    submit_btn = gr.Button("Submit")
+                    clear_btn = gr.ClearButton([msg, chatbot], value="Clear")
+            
+        # Preprocessing events
+        db_btn.click(initialize_database, \
+            inputs=[document], \
+            outputs=[vector_db, db_progress])
+        qachain_btn.click(initialize_LLM, \
+            inputs=[llm_btn, slider_temperature, slider_maxtokens, slider_topk, vector_db], \
+            outputs=[qa_chain, llm_progress]).then(lambda:[None,"",0,"",0,"",0], \
+            inputs=None, \
+            outputs=[chatbot, doc_source1, source1_page, doc_source2, source2_page, doc_source3, source3_page], \
+            queue=False)
+
+        # Chatbot events
+        msg.submit(conversation, \
+            inputs=[qa_chain, msg, chatbot], \
+            outputs=[qa_chain, msg, chatbot, doc_source1, source1_page, doc_source2, source2_page, doc_source3, source3_page], \
+            queue=False)
+        submit_btn.click(conversation, \
+            inputs=[qa_chain, msg, chatbot], \
+            outputs=[qa_chain, msg, chatbot, doc_source1, source1_page, doc_source2, source2_page, doc_source3, source3_page], \
+            queue=False)
+        clear_btn.click(lambda:[None,"",0,"",0,"",0], \
+            inputs=None, \
+            outputs=[chatbot, doc_source1, source1_page, doc_source2, source2_page, doc_source3, source3_page], \
+            queue=False)
+    demo.queue().launch(debug=True)
+
+
+if __name__ == "__main__":
+    demo()
+
